@@ -134,6 +134,12 @@ Run the full verification suite:
 ./mvnw verify
 ```
 
+On Docker Desktop environments where Testcontainers cannot mount the Docker socket for Ryuk, run the same verification with Ryuk disabled:
+
+```bash
+TESTCONTAINERS_RYUK_DISABLED=true ./mvnw -B verify
+```
+
 Run individual checks:
 
 ```bash
@@ -144,20 +150,10 @@ Run individual checks:
 
 Integration tests use Testcontainers for Postgres and RabbitMQ, so Docker must be available locally.
 
-## Implementation Sequence
+## Roadmap
 
-Phase one should not be implemented by running every ticket in parallel immediately. The runtime scaffold must land first because it chooses the stack, project layout, test runner, formatter/linter, CI checks, and local Postgres/RabbitMQ setup.
-
-Recommended order:
-
-1. Runtime scaffold, including minimum CI for formatting, linting, typechecking, tests, and build checks.
-2. Durable Async Run and Result Snapshot schema.
-3. Workflow DAG orchestrator and mock Investment Research Corpus workers.
-4. Result Snapshot projection/query APIs and Operation/SSE/auth APIs.
-5. Phase-one acceptance test suite.
-
-Parallel agents should only start once the scaffold exists. After that, agents should coordinate around shared contracts for database schema, Worker Commands, Worker Completion Events, Snapshot Schema, and API response shapes.
+Phase-one scope and recommended implementation order live in [docs/specs/phase-1-implementation.md](./docs/specs/phase-1-implementation.md). Live implementation status is tracked in GitHub Issues.
 
 ## Status
 
-This repo currently contains the design docs and domain language for the architecture. Implementation work can follow the vocabulary and ADRs already captured here.
+The runtime scaffold is in place. See GitHub Issues for current implementation status.
