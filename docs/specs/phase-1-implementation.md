@@ -3,6 +3,12 @@
 ## Summary
 Phase 1 implements a concrete `Hybrid Chunk Search` prototype for a mock Investment Research Corpus. The goal is to prove the async architecture, not retrieval quality: create a Search Request, execute a Workflow DAG through RabbitMQ workers, materialize a stable Result Snapshot in Postgres, notify the frontend through SSE, and query the snapshot synchronously for filtering, sorting, grouping, and aggregation.
 
+## Tracking
+
+Canonical implementation tracker: https://github.com/lQingRu/data-aggregator/issues/1
+
+The tracker issue records implementation sequencing. GitHub issue state remains the source of truth for live task status.
+
 ## Execution Order and Parallelism
 
 Do not start all implementation tickets in parallel from an empty repo. The phase-one runtime scaffold must land first because it chooses the stack, project layout, test runner, formatter/linter, CI checks, and local Postgres/RabbitMQ setup. Until that exists, other agents will likely conflict on package configuration, shared types, migrations, test harnesses, and runtime boundaries.
@@ -672,4 +678,3 @@ Phase 1 does not include:
 - Glossary: `CONTEXT.md`
 - Project overview: `README.md`
 - ADRs: `docs/adr/`
-- GitHub implementation issue: `#1`

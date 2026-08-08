@@ -13,6 +13,13 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v` -- `gh` does this automatically when run inside a clone.
 
+## Link format
+
+- In repository docs, use full GitHub issue URLs so links work outside GitHub rendering.
+- In GitHub issue bodies and comments, use `#<number>` references so GitHub creates native cross-links.
+- When a spec has a tracker issue, put the full tracker URL near the top of the spec under `## Tracking`.
+- In the tracker issue body, list child implementation issues using `#<number>` references.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
@@ -32,6 +39,37 @@ Create a GitHub issue.
 ## When a skill says "fetch the relevant ticket"
 
 Run `gh issue view <number> --comments`.
+
+## Implementation sequencing
+
+For multi-ticket implementation work, use one GitHub tracker issue as the sequencing surface.
+
+The tracker issue body records the intended order only:
+
+```md
+## Sequence
+
+1. #2 Runtime scaffold
+2. #4 Durable Async Run and Result Snapshot schema
+3. #3 Workflow DAG and worker command contracts
+```
+
+Do not duplicate live status in the sequence. GitHub issue state is the source of truth:
+
+- closed issue = done
+- open assigned issue = claimed or in progress
+- open unassigned issue = available if unblocked
+- blocked label or GitHub dependency = not available
+
+When asked to implement "the next task":
+
+1. Fetch the tracker issue named by the user or linked from the relevant spec.
+2. Read its ordered `## Sequence` list.
+3. Walk the sequence top to bottom.
+4. Select the first linked issue that is open, unassigned, and unblocked.
+5. Fetch that issue with comments before implementing.
+
+If the tracker issue, sequence, issue state, or blocking state is unavailable or ambiguous, stop and ask. Do not infer the next task from issue number order, README status text, or the phase spec alone.
 
 ## Wayfinding operations
 
