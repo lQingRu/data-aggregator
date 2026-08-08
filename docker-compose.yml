@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: data_aggregator
+      POSTGRES_PASSWORD: data_aggregator
+      POSTGRES_USER: data_aggregator
+    healthcheck:
+      interval: 5s
+      retries: 10
+      test: ["CMD-SHELL", "pg_isready -U data_aggregator -d data_aggregator"]
+      timeout: 5s
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    healthcheck:
+      interval: 5s
+      retries: 10
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      timeout: 5s
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+volumes:
+  postgres-data:

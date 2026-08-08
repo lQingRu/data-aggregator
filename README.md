@@ -4,16 +4,18 @@ Data Aggregator is an architecture test for asynchronous search and enrichment w
 
 The project is exploring a reusable pattern for expensive or progress-visible work. Search is the first workflow, but the same model is meant to support later async use cases such as score explanations, bulk enrichment, exports, and other batch operations.
 
-## What It Does
+## What Phase One Will Prove
 
-- Accepts a `Search Request`
-- Creates a durable `Search Run`
-- Uses an `Orchestrator` to schedule a `Workflow DAG`
-- Dispatches `Worker Command` messages through RabbitMQ
-- Lets workers write durable state and emit `Worker Completion Event` updates
-- Materializes a `Result Snapshot` in Postgres
-- Lets the frontend filter, sort, group, and aggregate on the snapshot without re-querying Elasticsearch
-- Notifies the frontend of progress through SSE
+Phase one is intended to prove that the backend can:
+
+- accept a `Search Request`
+- create a durable `Search Run`
+- use an `Orchestrator` to schedule a `Workflow DAG`
+- dispatch `Worker Command` messages through RabbitMQ
+- let workers write durable state and emit `Worker Completion Event` updates
+- materialize a `Result Snapshot` in Postgres
+- let the frontend filter, sort, group, and aggregate on the snapshot without re-querying Elasticsearch
+- notify the frontend of progress through SSE
 
 ## Core Ideas
 
@@ -31,7 +33,7 @@ The project is exploring a reusable pattern for expensive or progress-visible wo
 2. The orchestrator publishes worker commands to RabbitMQ.
 3. Workers execute one step at a time and persist their outputs and step state.
 4. The orchestrator advances the DAG when upstream steps finish.
-5. The snapshot projector turns contributions and enrichments into queryable result rows.
+5. The `Snapshot Projector` turns contributions and enrichments into queryable `Result Items`.
 6. The frontend subscribes to SSE for progress updates and fetches authoritative data over HTTP.
 
 ## Phases
@@ -40,7 +42,7 @@ The project is exploring a reusable pattern for expensive or progress-visible wo
 
 Phase one proves the reusable async search architecture:
 
-- mock investment research corpus
+- mock `Investment Research Corpus`
 - search request and run creation
 - RabbitMQ-based worker dispatch
 - lexical retrieval
@@ -83,6 +85,8 @@ The scaffold is a minimal Spring Boot application. It creates clear homes for AP
 
 - API code: `src/main/java/com/dataaggregator/api`
 - worker code: `src/main/java/com/dataaggregator/worker`
+- persistence code: `src/main/java/com/dataaggregator/persistence`
+- workflow definitions: `src/main/java/com/dataaggregator/workflow`
 - application configuration: `src/main/resources/application.yml`
 - worker profile configuration: `src/main/resources/application-worker.yml`
 - Flyway migrations: `src/main/resources/db/migration`

@@ -1,0 +1,2 @@
+-- Runtime scaffold placeholder.
+-- Durable async run, search request, workflow, and result snapshot tables land in later tickets.
