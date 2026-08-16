@@ -9,5 +9,11 @@ public record DataAggregatorProperties(String runtimeMode, Auth auth, Worker wor
 
     public record Worker(String placeholderQueue) {}
 
-    public record Workflow(int hybridChunkSearchVersion) {}
+    public record Workflow(
+            int hybridChunkSearchVersion,
+            String completionEventQueue,
+            String lexicalQueue,
+            String semanticQueue,
+            String relevanceScoreQueue,
+            String snapshotProjectorQueue) {}
 }

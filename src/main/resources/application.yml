@@ -30,4 +30,9 @@ data-aggregator:
   worker:
     placeholder-queue: "data-aggregator.worker.placeholder"
   workflow:
+    completion-event-queue: "data-aggregator.workflow.completions"
     hybrid-chunk-search-version: 1
+    lexical-queue: "search.lexical"
+    relevance-score-queue: "enrichment.relevance_score"
+    semantic-queue: "search.semantic"
+    snapshot-projector-queue: "snapshot.projector"
