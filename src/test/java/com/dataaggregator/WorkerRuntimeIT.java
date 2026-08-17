@@ -33,6 +33,19 @@ class WorkerRuntimeIT extends IntegrationTestContainers {
         assertThat(properties.runtimeMode()).isEqualTo("worker");
         assertThat(amqpAdmin.getQueueInfo(properties.worker().placeholderQueue()))
                 .isNotNull();
+        assertThat(amqpAdmin.getQueueInfo(properties.workflow().lexicalQueue())).isNotNull();
+        assertThat(amqpAdmin.getQueueInfo(properties.workflow().semanticQueue()))
+                .isNotNull();
+        assertThat(amqpAdmin.getQueueInfo(properties.workflow().relevanceScoreQueue()))
+                .isNotNull();
+        assertThat(amqpAdmin.getQueueInfo(properties.workflow().snapshotProjectorQueue()))
+                .isNotNull();
+        assertThat(listenerRegistry.getListenerContainerIds())
+                .contains(
+                        "hybridChunkSearch.lexicalRetrieval",
+                        "hybridChunkSearch.semanticRetrieval",
+                        "hybridChunkSearch.mockRelevanceScoring",
+                        "hybridChunkSearch.snapshotProjection");
     }
 
     @AfterEach
