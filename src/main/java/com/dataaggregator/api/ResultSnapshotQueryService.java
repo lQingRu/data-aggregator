@@ -58,8 +58,8 @@ public class ResultSnapshotQueryService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> snapshotMetadata(String snapshotId) {
-        SnapshotRecord snapshot = loadSnapshot(snapshotId);
+    public Map<String, Object> snapshotMetadata(String snapshotId, String userId) {
+        SnapshotRecord snapshot = loadSnapshot(snapshotId, userId);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("snapshot_id", snapshot.id());
         metadata.put("search_run_id", snapshot.searchRunId());
@@ -72,13 +72,13 @@ public class ResultSnapshotQueryService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> snapshotSchema(String snapshotId) {
-        return loadSchema(loadSnapshot(snapshotId));
+    public Map<String, Object> snapshotSchema(String snapshotId, String userId) {
+        return loadSchema(loadSnapshot(snapshotId, userId));
     }
 
     @Transactional(readOnly = true)
-    public SnapshotQueryResponse query(String snapshotId, SnapshotQueryRequest request) {
-        SnapshotRecord snapshot = loadSnapshot(snapshotId);
+    public SnapshotQueryResponse query(String snapshotId, String userId, SnapshotQueryRequest request) {
+        SnapshotRecord snapshot = loadSnapshot(snapshotId, userId);
         if (!"ready".equals(snapshot.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Result snapshot is not ready: " + snapshotId);
         }
@@ -351,15 +351,15 @@ public class ResultSnapshotQueryService {
         return schema;
     }
 
-    private SnapshotRecord loadSnapshot(String snapshotId) {
+    private SnapshotRecord loadSnapshot(String snapshotId, String userId) {
         try {
             return jdbcTemplate.queryForObject(
                     """
                     select id, search_run_id, status, schema_json::text, default_sort_json::text, created_at, ready_at
                     from result_snapshots
-                    where id = :snapshotId
+                    where id = :snapshotId and user_id = :userId
                     """,
-                    new MapSqlParameterSource("snapshotId", snapshotId),
+                    new MapSqlParameterSource("snapshotId", snapshotId).addValue("userId", userId),
                     (rs, rowNum) -> new SnapshotRecord(
                             rs.getString("id"),
                             rs.getString("search_run_id"),

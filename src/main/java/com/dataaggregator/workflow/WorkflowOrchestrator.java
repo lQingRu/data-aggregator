@@ -14,6 +14,7 @@ import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,16 +34,19 @@ public class WorkflowOrchestrator {
     private final DataAggregatorProperties properties;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
     private final RabbitTemplate rabbitTemplate;
 
     public WorkflowOrchestrator(
             DataAggregatorProperties properties,
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
+            ApplicationEventPublisher eventPublisher,
             RabbitTemplate rabbitTemplate) {
         this.properties = properties;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
         this.rabbitTemplate = rabbitTemplate;
     }
 
@@ -114,6 +118,7 @@ public class WorkflowOrchestrator {
 
         SearchRunContext context = loadAndLockContext(ids.searchRunId());
         scheduleReadySteps(context, workflow);
+        publishRunChangedAfterCommit(context);
         return ids;
     }
 
@@ -133,11 +138,12 @@ public class WorkflowOrchestrator {
 
     @Transactional
     public void recoverSearchRun(String searchRunId) {
-        advanceFromDurableState(searchRunId);
+        SearchRunContext context = loadAndLockContext(searchRunId);
+        advanceFromDurableState(context);
+        publishRunChangedAfterCommit(context);
     }
 
-    private void advanceFromDurableState(String searchRunId) {
-        SearchRunContext context = loadAndLockContext(searchRunId);
+    private void advanceFromDurableState(SearchRunContext context) {
         if (!ACTIVE_RUN_STATUSES.contains(context.runStatus())) {
             return;
         }
@@ -541,6 +547,22 @@ public class WorkflowOrchestrator {
                 MessageBuilder.withBody(jsonBytes(command))
                         .setContentType(MessageProperties.CONTENT_TYPE_JSON)
                         .build());
+    }
+
+    private void publishRunChangedAfterCommit(SearchRunContext context) {
+        AsyncRunChangedEvent event = new AsyncRunChangedEvent(
+                context.operationId(), context.userId(), "result_snapshot", context.resultSnapshotId());
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            eventPublisher.publishEvent(event);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                eventPublisher.publishEvent(event);
+            }
+        });
     }
 
     private String prefixedId(String prefix) {
