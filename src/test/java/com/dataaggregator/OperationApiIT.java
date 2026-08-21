@@ -2,6 +2,7 @@ package com.dataaggregator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.dataaggregator.api.AsyncEventStreamService;
 import com.dataaggregator.config.DataAggregatorProperties;
 import com.dataaggregator.support.IntegrationTestContainers;
 import java.io.BufferedReader;
@@ -56,6 +57,9 @@ class OperationApiIT extends IntegrationTestContainers {
     @Autowired
     private TestRestTemplate restTemplate;
 
+    @Autowired
+    private AsyncEventStreamService eventStreamService;
+
     @BeforeEach
     void resetState() {
         amqpAdmin.purgeQueue(properties.workflow().lexicalQueue(), true);
@@ -79,6 +83,7 @@ class OperationApiIT extends IntegrationTestContainers {
 
     @AfterEach
     void stopListenersBeforeContainersShutdown() {
+        eventStreamService.closeAll();
         listenerRegistry.getListenerContainers().forEach(MessageListenerContainer::stop);
     }
 

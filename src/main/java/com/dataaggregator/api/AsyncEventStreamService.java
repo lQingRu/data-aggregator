@@ -1,6 +1,7 @@
 package com.dataaggregator.api;
 
 import com.dataaggregator.workflow.AsyncRunChangedEvent;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +74,16 @@ public class AsyncEventStreamService {
         if (scopedEmitters.isEmpty()) {
             emitters.remove(scope, scopedEmitters);
         }
+    }
+
+    @PreDestroy
+    public void closeAll() {
+        emitters.forEach((scope, scopedEmitters) -> {
+            for (SseEmitter emitter : scopedEmitters) {
+                remove(scope, emitter);
+                emitter.complete();
+            }
+        });
     }
 
     private record RunScope(String userId, String scopeType, String scopeId) {}
