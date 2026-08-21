@@ -150,7 +150,8 @@ Status: `202 Accepted`
 Do not return `events_url`. Clients use the documented SSE endpoint.
 
 ## API Surface
-OpenAPI contract: [`docs/specs/openapi.yaml`](./openapi.yaml).
+OpenAPI is generated from the Spring MVC controllers and typed API records at runtime.
+Swagger UI is available at `/swagger-ui.html`; the generated OpenAPI JSON is available at `/v3/api-docs`.
 
 Phase 1 needs these endpoints:
 

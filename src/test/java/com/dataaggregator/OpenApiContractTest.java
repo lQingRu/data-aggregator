@@ -2,30 +2,82 @@ package com.dataaggregator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import com.dataaggregator.support.IntegrationTestContainers;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.yaml.snakeyaml.Yaml;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.ResponseEntity;
 
-class OpenApiContractTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class OpenApiContractTest extends IntegrationTestContainers {
+
+    @LocalServerPort
+    private int port;
+
+    @Autowired
+    private TestRestTemplate restTemplate;
 
     @Test
-    void openApiContractParsesAndReferencesExistingComponents() throws IOException {
-        Object parsed = new Yaml().load(Files.readString(Path.of("docs/specs/openapi.yaml")));
+    void generatedOpenApiContractExposesPhaseOneApiSurface() {
+        ResponseEntity<Map> response =
+                restTemplate.getForEntity("http://localhost:" + port + "/v3/api-docs", Map.class);
 
-        assertThat(parsed).isInstanceOf(Map.class);
-        Map<?, ?> document = (Map<?, ?>) parsed;
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        Map<?, ?> document = response.getBody();
+
+        assertThat(document).isNotNull();
         assertThat(document.get("openapi")).isNotNull();
         assertThat(document.get("paths")).isNotNull();
         assertThat(document.get("components")).isNotNull();
 
+        Map<?, ?> paths = mapValue(document, "paths");
+        assertContainsKeys(
+                paths,
+                "/search-requests",
+                "/operations/{operationId}",
+                "/operations/{operationId}/cancel",
+                "/events",
+                "/result-snapshots/{snapshotId}",
+                "/result-snapshots/{snapshotId}/activity",
+                "/result-snapshots/{snapshotId}/schema",
+                "/result-snapshots/{snapshotId}/query");
+        assertThat(paths.containsKey("/internal/runtime")).isFalse();
+
         Map<?, ?> components = mapValue(document, "components");
         Map<?, ?> schemas = mapValue(components, "schemas");
-        assertThat(schemas).isNotEmpty();
+        assertContainsKeys(
+                schemas,
+                "SearchRequestCreateRequest",
+                "SearchRequestCreateResponse",
+                "OperationResponse",
+                "SnapshotMetadataResponse",
+                "SnapshotActivityResponse",
+                "SnapshotSchemaResponse",
+                "SnapshotQueryRequest",
+                "SnapshotQueryResponse",
+                "ApiErrorResponse");
+        assertThat(mapValue(components, "securitySchemes").containsKey("MockUserId"))
+                .isTrue();
 
         assertReferencesExist(document, document);
+    }
+
+    @Test
+    void swaggerUiEndpointIsAvailable() {
+        ResponseEntity<String> response =
+                restTemplate.getForEntity("http://localhost:" + port + "/swagger-ui.html", String.class);
+
+        assertThat(response.getStatusCode().is3xxRedirection()
+                        || response.getStatusCode().is2xxSuccessful())
+                .isTrue();
+        if (response.getHeaders().getLocation() == null) {
+            assertThat(response.getBody()).containsIgnoringCase("swagger");
+        } else {
+            assertThat(response.getHeaders().getLocation().toString()).contains("/swagger-ui/");
+        }
     }
 
     private void assertReferencesExist(Object node, Map<?, ?> document) {
@@ -56,5 +108,11 @@ class OpenApiContractTest {
         Object value = map.get(key);
         assertThat(value).isInstanceOf(Map.class);
         return (Map<?, ?>) value;
+    }
+
+    private void assertContainsKeys(Map<?, ?> map, String... keys) {
+        for (String key : keys) {
+            assertThat(map.containsKey(key)).as(key).isTrue();
+        }
     }
 }

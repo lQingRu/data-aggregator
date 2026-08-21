@@ -4,9 +4,11 @@ Apply these rules when creating or modifying externally consumed APIs.
 
 ## API contracts must be documented
 
-When an HTTP API is introduced or changed, update the API specification as part of the same change.
+When an HTTP API is introduced or changed, update the generated OpenAPI/Swagger contract as part of the same change.
 
-Prefer OpenAPI/Swagger when the framework and project support it.
+For this Spring Boot service, SpringDoc is the source of truth. The running app must expose Swagger UI at `/swagger-ui.html` and generated OpenAPI JSON at `/v3/api-docs`.
+
+Do not add or maintain a hand-written `openapi.yaml` for implemented APIs unless there is an explicit design-only need and it is clearly marked as non-authoritative.
 
 The API specification should describe:
 
@@ -24,7 +26,7 @@ Do not consider an API change complete if the implementation and documented cont
 
 ## Prefer generated documentation from typed contracts
 
-Where practical, derive OpenAPI schemas from the same typed models or schemas used by the application.
+Derive OpenAPI schemas from the same typed models or schemas used by the application.
 
 Avoid independently maintaining equivalent:
 
@@ -34,7 +36,7 @@ Avoid independently maintaining equivalent:
 
 when they can share a source of truth.
 
-The goal is to reduce contract drift.
+The goal is to reduce contract drift. Prefer controller annotations for operation summaries, examples, response codes, and non-inferable behavior; prefer request/response records and validation annotations for schema shape.
 
 ## Document errors explicitly
 
@@ -139,4 +141,5 @@ When changing an API, verify:
 - relevant failure cases are represented
 - authentication and authorization are enforced where required
 - tests cover important behavior
-- OpenAPI/Swagger output remains valid
+- generated OpenAPI/Swagger output remains valid at `/v3/api-docs`
+- Swagger UI remains available at `/swagger-ui.html`

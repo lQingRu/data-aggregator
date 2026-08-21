@@ -116,6 +116,8 @@ The placeholder runtime endpoint is available at:
 curl http://localhost:8080/internal/runtime
 ```
 
+Swagger UI is available at `http://localhost:8080/swagger-ui.html`, and the generated OpenAPI JSON is available at `http://localhost:8080/v3/api-docs`.
+
 ### Worker Process
 
 Run the placeholder worker process:
