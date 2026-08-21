@@ -19,3 +19,21 @@ At task closeout, update docs only when their source of truth changed: README fo
 ### Runtime and integration testing
 
 For runtime scaffolds, container-backed integration tests, message consumers, local service orchestration, or CI verification work, see `docs/agents/testing-and-runtime.md`.
+
+## Core Rules
+
+For code changes, use these as tie-breakers when choosing among otherwise valid designs:
+
+- strongly typed
+- explicit
+- modular
+- testable
+- dependency-injected where appropriate
+- easy to change
+- easy to delete
+- easy to understand
+- difficult to misuse
+
+### API design
+
+When creating or modifying externally consumed APIs, read `docs/agents/api-design.md`.
