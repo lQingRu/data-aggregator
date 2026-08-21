@@ -58,21 +58,18 @@ public class ResultSnapshotQueryService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> snapshotMetadata(String snapshotId, String userId) {
+    public SnapshotMetadataResponse snapshotMetadata(String snapshotId, String userId) {
         SnapshotRecord snapshot = loadSnapshot(snapshotId, userId);
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("snapshot_id", snapshot.id());
-        metadata.put("search_run_id", snapshot.searchRunId());
-        metadata.put("status", snapshot.status());
-        metadata.put("created_at", snapshot.createdAt().toString());
-        metadata.put(
-                "ready_at",
+        return new SnapshotMetadataResponse(
+                snapshot.id(),
+                snapshot.searchRunId(),
+                snapshot.status(),
+                snapshot.createdAt().toString(),
                 snapshot.readyAt() == null ? null : snapshot.readyAt().toString());
-        return metadata;
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> snapshotSchema(String snapshotId, String userId) {
+    public SnapshotSchemaResponse snapshotSchema(String snapshotId, String userId) {
         return loadSchema(loadSnapshot(snapshotId, userId));
     }
 
@@ -97,7 +94,7 @@ public class ResultSnapshotQueryService {
                 "select count(*) from result_items where " + whereSql, params, Integer.class);
         params.addValue("limit", limit);
         params.addValue("offset", offset);
-        List<Map<String, Object>> rows = jdbcTemplate.query(
+        List<SnapshotResultRow> rows = jdbcTemplate.query(
                 "select " + ROW_COLUMNS + " from result_items where " + whereSql + orderSql
                         + " limit :limit offset :offset",
                 params,
@@ -280,24 +277,23 @@ public class ResultSnapshotQueryService {
         return projections;
     }
 
-    private Map<String, Object> row(ResultSet rs, int rowNum) throws SQLException {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("chunk_id", rs.getString("chunk_id"));
-        row.put("parent_entity_id", rs.getString("parent_entity_id"));
-        row.put("parent_title", rs.getString("parent_title"));
-        row.put("parent_type", rs.getString("parent_type"));
-        row.put("source_name", rs.getString("source_name"));
-        row.put("ticker", rs.getString("ticker"));
-        row.put("company_name", rs.getString("company_name"));
-        row.put("sector", rs.getString("sector"));
-        row.put("region", rs.getString("region"));
-        row.put("published_at", rs.getTimestamp("published_at").toInstant().toString());
-        row.put("author", rs.getString("author"));
-        row.put("chunk_text", rs.getString("chunk_text"));
-        row.put("relevance_score", numericValue(rs, "relevance_score"));
-        row.put("lexical_rank", rs.getObject("lexical_rank", Integer.class));
-        row.put("source_contributions", sourceContributions(rs.getString("source_contributions_json")));
-        return row;
+    private SnapshotResultRow row(ResultSet rs, int rowNum) throws SQLException {
+        return new SnapshotResultRow(
+                rs.getString("chunk_id"),
+                rs.getString("parent_entity_id"),
+                rs.getString("parent_title"),
+                rs.getString("parent_type"),
+                rs.getString("source_name"),
+                rs.getString("ticker"),
+                rs.getString("company_name"),
+                rs.getString("sector"),
+                rs.getString("region"),
+                rs.getTimestamp("published_at").toInstant().toString(),
+                rs.getString("author"),
+                rs.getString("chunk_text"),
+                rs.getObject("relevance_score", Double.class),
+                rs.getObject("lexical_rank", Integer.class),
+                sourceContributions(rs.getString("source_contributions_json")));
     }
 
     private Map<String, Object> groupRow(
@@ -343,12 +339,55 @@ public class ResultSnapshotQueryService {
         return sorts;
     }
 
-    private Map<String, Object> loadSchema(SnapshotRecord snapshot) {
+    private SnapshotSchemaResponse loadSchema(SnapshotRecord snapshot) {
         Map<String, Object> schema = readJson(snapshot.schemaJson(), JSON_OBJECT);
         if (!schema.containsKey("fields")) {
             badRequest("Snapshot schema is not available for snapshot: " + snapshot.id());
         }
-        return schema;
+        return new SnapshotSchemaResponse(
+                snapshot.id(), schemaFields(schema.get("fields")), schemaDefaultSort(schema.get("default_sort")));
+    }
+
+    private List<SnapshotSchemaFieldResponse> schemaFields(Object fieldsValue) {
+        if (!(fieldsValue instanceof List<?> fieldObjects)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema fields must be an array");
+        }
+        List<SnapshotSchemaFieldResponse> fields = new ArrayList<>();
+        for (Object fieldValue : fieldObjects) {
+            if (!(fieldValue instanceof Map<?, ?> fieldObject)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema field must be an object");
+            }
+            fields.add(new SnapshotSchemaFieldResponse(
+                    fieldValue(fieldObject, "name"),
+                    fieldValue(fieldObject, "type"),
+                    booleanField(fieldObject, "filterable"),
+                    booleanField(fieldObject, "sortable"),
+                    booleanField(fieldObject, "groupable"),
+                    booleanField(fieldObject, "aggregatable"),
+                    optionalBooleanField(fieldObject, "nullable")));
+        }
+        return List.copyOf(fields);
+    }
+
+    private List<SnapshotSort> schemaDefaultSort(Object defaultSortValue) {
+        if (defaultSortValue == null) {
+            return List.of();
+        }
+        if (!(defaultSortValue instanceof List<?> sortObjects)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot default_sort must be an array");
+        }
+        List<SnapshotSort> sorts = new ArrayList<>();
+        for (Object sortValue : sortObjects) {
+            if (!(sortValue instanceof Map<?, ?> sortObject)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Snapshot default_sort item must be an object");
+            }
+            sorts.add(new SnapshotSort(
+                    fieldValue(sortObject, "field"),
+                    fieldValue(sortObject, "direction"),
+                    stringValue(sortObject.get("nulls"))));
+        }
+        return List.copyOf(sorts);
     }
 
     private SnapshotRecord loadSnapshot(String snapshotId, String userId) {
@@ -426,21 +465,39 @@ public class ResultSnapshotQueryService {
             Instant createdAt,
             Instant readyAt) {}
 
+    private String fieldValue(Map<?, ?> object, String name) {
+        Object value = object.get(name);
+        if (value == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema field missing " + name);
+        }
+        return value.toString();
+    }
+
+    private boolean booleanField(Map<?, ?> object, String name) {
+        Object value = object.get(name);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema field missing boolean " + name);
+    }
+
+    private boolean optionalBooleanField(Map<?, ?> object, String name) {
+        Object value = object.get(name);
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema field invalid boolean " + name);
+    }
+
     private record SnapshotSchema(Map<String, SnapshotField> fields) {
 
-        private static SnapshotSchema from(Map<String, Object> schema) {
-            Object fieldsValue = schema.get("fields");
-            if (!(fieldsValue instanceof List<?> fieldObjects)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema fields must be an array");
-            }
-
+        private static SnapshotSchema from(SnapshotSchemaResponse schema) {
             Map<String, SnapshotField> fields = new LinkedHashMap<>();
-            for (Object fieldValue : fieldObjects) {
-                if (!(fieldValue instanceof Map<?, ?> fieldObject)) {
-                    throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST, "Snapshot schema field must be an object");
-                }
-                SnapshotField field = SnapshotField.from(fieldObject);
+            for (SnapshotSchemaFieldResponse fieldResponse : schema.fields()) {
+                SnapshotField field = SnapshotField.from(fieldResponse);
                 fields.put(field.name(), field);
             }
             return new SnapshotSchema(fields);
@@ -464,35 +521,19 @@ public class ResultSnapshotQueryService {
             boolean groupable,
             boolean aggregatable) {
 
-        private static SnapshotField from(Map<?, ?> fieldObject) {
-            String name = value(fieldObject, "name");
+        private static SnapshotField from(SnapshotSchemaFieldResponse fieldResponse) {
+            String name = fieldResponse.name();
             if (!RESULT_ITEM_SCHEMA_COLUMNS.contains(name)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported snapshot field: " + name);
             }
             return new SnapshotField(
                     name,
                     name,
-                    value(fieldObject, "type"),
-                    booleanValue(fieldObject, "filterable"),
-                    booleanValue(fieldObject, "sortable"),
-                    booleanValue(fieldObject, "groupable"),
-                    booleanValue(fieldObject, "aggregatable"));
-        }
-
-        private static String value(Map<?, ?> fieldObject, String name) {
-            Object value = fieldObject.get(name);
-            if (value == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema field missing " + name);
-            }
-            return value.toString();
-        }
-
-        private static boolean booleanValue(Map<?, ?> fieldObject, String name) {
-            Object value = fieldObject.get(name);
-            if (value instanceof Boolean bool) {
-                return bool;
-            }
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Snapshot schema field missing boolean " + name);
+                    fieldResponse.type(),
+                    fieldResponse.filterable(),
+                    fieldResponse.sortable(),
+                    fieldResponse.groupable(),
+                    fieldResponse.aggregatable());
         }
     }
 

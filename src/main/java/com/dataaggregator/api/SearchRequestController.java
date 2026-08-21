@@ -1,10 +1,12 @@
 package com.dataaggregator.api;
 
-import java.util.Map;
+import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -20,9 +22,10 @@ public class SearchRequestController {
     }
 
     @PostMapping("/search-requests")
-    public Map<String, Object> createSearchRequest(
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public SearchRequestCreateResponse createSearchRequest(
             @RequestHeader(name = MockUserResolver.HEADER, required = false) String mockUserId,
-            @RequestBody SearchRequestCreateRequest request) {
+            @Valid @RequestBody SearchRequestCreateRequest request) {
         return operationService.createSearchRequest(userResolver.userId(mockUserId), request);
     }
 }

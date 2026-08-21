@@ -1,9 +1,12 @@
 package com.dataaggregator.api;
 
-public record SnapshotPageRequest(Integer limit, Integer offset) {
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
+public record SnapshotPageRequest(@Min(1) @Max(MAX_LIMIT) Integer limit, @Min(0) Integer offset) {
 
     private static final int DEFAULT_LIMIT = 50;
-    private static final int MAX_LIMIT = 500;
+    public static final int MAX_LIMIT = 500;
 
     public int resolvedLimit() {
         if (limit == null) {

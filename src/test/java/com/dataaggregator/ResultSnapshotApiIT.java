@@ -223,6 +223,8 @@ class ResultSnapshotApiIT extends IntegrationTestContainers {
         Map<String, Object> invalidSort =
                 Map.of("sort", List.of(Map.of("field", "source_contributions", "direction", "desc")));
         Map<String, Object> invalidGroup = Map.of("group_by", List.of("published_at"));
+        Map<String, Object> invalidPage = Map.of("page", Map.of("limit", 501, "offset", 0));
+        Map<String, Object> unknownField = Map.of("unexpected", true);
         Map<String, Object> invalidAggregation = Map.of(
                 "group_by",
                 List.of("region"),
@@ -239,6 +241,10 @@ class ResultSnapshotApiIT extends IntegrationTestContainers {
                 "http://localhost:" + port + "/result-snapshots/snap_api/query", invalidSort, Map.class);
         ResponseEntity<Map> groupResponse = restTemplate.postForEntity(
                 "http://localhost:" + port + "/result-snapshots/snap_api/query", invalidGroup, Map.class);
+        ResponseEntity<Map> pageResponse = restTemplate.postForEntity(
+                "http://localhost:" + port + "/result-snapshots/snap_api/query", invalidPage, Map.class);
+        ResponseEntity<Map> unknownFieldResponse = restTemplate.postForEntity(
+                "http://localhost:" + port + "/result-snapshots/snap_api/query", unknownField, Map.class);
         ResponseEntity<Map> aggregationResponse = restTemplate.postForEntity(
                 "http://localhost:" + port + "/result-snapshots/snap_api/query", invalidAggregation, Map.class);
 
@@ -247,7 +253,13 @@ class ResultSnapshotApiIT extends IntegrationTestContainers {
         assertThat(fieldOperatorResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(sortResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(groupResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(pageResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(unknownFieldResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(aggregationResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertErrorResponse(fieldResponse.getBody(), "BAD_REQUEST", 400, "/result-snapshots/snap_api/query");
+        assertErrorResponse(pageResponse.getBody(), "VALIDATION_ERROR", 400, "/result-snapshots/snap_api/query");
+        assertThat(fieldErrors(pageResponse.getBody()).get("page.limit")).isNotNull();
+        assertErrorResponse(unknownFieldResponse.getBody(), "BAD_REQUEST", 400, "/result-snapshots/snap_api/query");
     }
 
     @Test
@@ -259,6 +271,7 @@ class ResultSnapshotApiIT extends IntegrationTestContainers {
                 "http://localhost:" + port + "/result-snapshots/snap_api/query", request, Map.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertErrorResponse(response.getBody(), "CONFLICT", 409, "/result-snapshots/snap_api/query");
     }
 
     private void insertResultItem(
@@ -307,6 +320,20 @@ class ResultSnapshotApiIT extends IntegrationTestContainers {
     private void assertNoMessage(String queue) {
         Message message = rabbitTemplate.receive(queue, 100);
         assertThat(message).as("unexpected message in %s", queue).isNull();
+    }
+
+    private void assertErrorResponse(Map<?, ?> body, String code, int status, String path) {
+        assertThat(body).isNotNull();
+        assertThat(body.get("code")).isEqualTo(code);
+        assertThat(body.get("status")).isEqualTo(status);
+        assertThat(body.get("path")).isEqualTo(path);
+        assertThat(body.get("message")).isInstanceOf(String.class);
+        assertThat(body.get("details")).isInstanceOf(Map.class);
+    }
+
+    private Map<?, ?> fieldErrors(Map<?, ?> body) {
+        Map<?, ?> details = (Map<?, ?>) body.get("details");
+        return (Map<?, ?>) details.get("field_errors");
     }
 
     private String schemaJson() {

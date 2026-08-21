@@ -1,3 +1,9 @@
 package com.dataaggregator.api;
 
-public record SnapshotSort(String field, String direction, String nulls) {}
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+
+public record SnapshotSort(
+        @NotBlank String field,
+        @Pattern(regexp = "asc|desc") String direction,
+        @Pattern(regexp = "first|last") String nulls) {}

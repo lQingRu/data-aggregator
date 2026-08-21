@@ -107,7 +107,7 @@ class OperationApiIT extends IntegrationTestContainers {
                 new HttpEntity<>(request, userHeaders("user_alpha")),
                 Map.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         Map<?, ?> body = response.getBody();
         assertThat(body).isNotNull();
         assertThat(body.containsKey("search_request_id")).isTrue();
@@ -126,6 +126,50 @@ class OperationApiIT extends IntegrationTestContainers {
         assertThat(operation.containsKey("warnings")).isTrue();
         assertThat(operation.containsKey("created_at")).isTrue();
         assertThat(operation.containsKey("updated_at")).isTrue();
+    }
+
+    @Test
+    void searchRequestCreationRejectsInvalidAndUnknownRequestFieldsAtTheBoundary() {
+        Map<String, Object> missingKeywords = Map.of(
+                "workflow",
+                "hybrid_chunk_search",
+                "question",
+                "Which markets show the strongest payment growth?",
+                "retrieval_filters",
+                Map.of("sector", List.of("financials")),
+                "initial_sort",
+                Map.of("field", "relevance_score", "direction", "desc"));
+        Map<String, Object> unknownField = Map.of(
+                "workflow",
+                "hybrid_chunk_search",
+                "keywords",
+                "digital wallet adoption",
+                "question",
+                "Which markets show the strongest payment growth?",
+                "retrieval_filters",
+                Map.of("sector", List.of("financials")),
+                "initial_sort",
+                Map.of("field", "relevance_score", "direction", "desc"),
+                "unexpected",
+                true);
+
+        ResponseEntity<Map> missingKeywordsResponse = restTemplate.exchange(
+                uri("/search-requests"),
+                HttpMethod.POST,
+                new HttpEntity<>(missingKeywords, userHeaders("user_alpha")),
+                Map.class);
+        ResponseEntity<Map> unknownFieldResponse = restTemplate.exchange(
+                uri("/search-requests"),
+                HttpMethod.POST,
+                new HttpEntity<>(unknownField, userHeaders("user_alpha")),
+                Map.class);
+
+        assertThat(missingKeywordsResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(unknownFieldResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertErrorResponse(missingKeywordsResponse.getBody(), "VALIDATION_ERROR", 400, "/search-requests");
+        assertThat(fieldErrors(missingKeywordsResponse.getBody()).get("keywords"))
+                .isNotNull();
+        assertErrorResponse(unknownFieldResponse.getBody(), "BAD_REQUEST", 400, "/search-requests");
     }
 
     @Test
@@ -211,6 +255,11 @@ class OperationApiIT extends IntegrationTestContainers {
         assertThat(activity.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(query.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(events.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertErrorResponse(operation.getBody(), "NOT_FOUND", 404, "/operations/op_other");
+        assertThat(events.getHeaders().getContentType()).isNotNull();
+        assertThat(events.getHeaders().getContentType().isCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                .isTrue();
+        assertThat(events.getBody()).contains("event: error").contains("\"code\":\"NOT_FOUND\"");
     }
 
     private URI uri(String path) {
@@ -221,6 +270,20 @@ class OperationApiIT extends IntegrationTestContainers {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Mock-User-Id", userId);
         return headers;
+    }
+
+    private void assertErrorResponse(Map<?, ?> body, String code, int status, String path) {
+        assertThat(body).isNotNull();
+        assertThat(body.get("code")).isEqualTo(code);
+        assertThat(body.get("status")).isEqualTo(status);
+        assertThat(body.get("path")).isEqualTo(path);
+        assertThat(body.get("message")).isInstanceOf(String.class);
+        assertThat(body.get("details")).isInstanceOf(Map.class);
+    }
+
+    private Map<?, ?> fieldErrors(Map<?, ?> body) {
+        Map<?, ?> details = (Map<?, ?>) body.get("details");
+        return (Map<?, ?>) details.get("field_errors");
     }
 
     private SseResponse readEvents(String path, String userId, int eventCount) {

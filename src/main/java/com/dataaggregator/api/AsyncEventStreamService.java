@@ -4,7 +4,6 @@ import com.dataaggregator.workflow.AsyncRunChangedEvent;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,14 +24,14 @@ public class AsyncEventStreamService {
     }
 
     public SseEmitter subscribe(String scopeType, String scopeId, String userId) throws IOException {
-        List<Map<String, Object>> operations = operationService.operationsForScope(scopeType, scopeId, userId);
+        List<OperationResponse> operations = operationService.operationsForScope(scopeType, scopeId, userId);
         RunScope scope = new RunScope(userId, scopeType, scopeId);
         SseEmitter emitter = new SseEmitter(0L);
         emitters.computeIfAbsent(scope, ignored -> new CopyOnWriteArrayList<>()).add(emitter);
         emitter.onCompletion(() -> remove(scope, emitter));
         emitter.onTimeout(() -> remove(scope, emitter));
         emitter.onError(ignored -> remove(scope, emitter));
-        for (Map<String, Object> operation : operations) {
+        for (OperationResponse operation : operations) {
             send(scope, emitter, operation);
         }
         return emitter;
@@ -46,13 +45,13 @@ public class AsyncEventStreamService {
             return;
         }
 
-        Map<String, Object> operation = operationService.operation(event.operationId(), event.userId());
+        OperationResponse operation = operationService.operation(event.operationId(), event.userId());
         for (SseEmitter emitter : subscribers) {
             send(scope, emitter, operation);
         }
     }
 
-    private void send(RunScope scope, SseEmitter emitter, Map<String, Object> operation) {
+    private void send(RunScope scope, SseEmitter emitter, OperationResponse operation) {
         try {
             emitter.send(SseEmitter.event()
                     .name(operationService.sseEventName(operation))

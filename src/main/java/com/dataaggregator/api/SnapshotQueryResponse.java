@@ -6,6 +6,6 @@ import java.util.Map;
 
 public record SnapshotQueryResponse(
         @JsonProperty("snapshot_id") String snapshotId,
-        List<Map<String, Object>> rows,
+        List<SnapshotResultRow> rows,
         List<Map<String, Object>> groups,
         SnapshotPageResponse page) {}

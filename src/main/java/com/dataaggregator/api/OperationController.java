@@ -1,6 +1,5 @@
 package com.dataaggregator.api;
 
-import java.util.Map;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,14 +20,14 @@ public class OperationController {
     }
 
     @GetMapping("/operations/{operationId}")
-    public Map<String, Object> operation(
+    public OperationResponse operation(
             @RequestHeader(name = MockUserResolver.HEADER, required = false) String mockUserId,
             @PathVariable String operationId) {
         return operationService.operation(operationId, userResolver.userId(mockUserId));
     }
 
     @PostMapping("/operations/{operationId}/cancel")
-    public Map<String, Object> cancelOperation(
+    public OperationResponse cancelOperation(
             @RequestHeader(name = MockUserResolver.HEADER, required = false) String mockUserId,
             @PathVariable String operationId) {
         return operationService.cancelOperation(operationId, userResolver.userId(mockUserId));

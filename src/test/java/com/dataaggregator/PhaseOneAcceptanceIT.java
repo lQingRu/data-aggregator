@@ -116,7 +116,7 @@ class PhaseOneAcceptanceIT extends IntegrationTestContainers {
                 new HttpEntity<>(createRequest, userHeaders("user_acceptance")),
                 Map.class);
 
-        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         Map<?, ?> createdBody = created.getBody();
         assertThat(createdBody).isNotNull();
         Map<?, ?> operation = (Map<?, ?>) createdBody.get("operation");
@@ -233,7 +233,7 @@ class PhaseOneAcceptanceIT extends IntegrationTestContainers {
                 HttpMethod.POST,
                 new HttpEntity<>(createRequest, userHeaders("user_owner")),
                 Map.class);
-        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         Map<?, ?> createdBody = created.getBody();
         Map<?, ?> operation = (Map<?, ?>) createdBody.get("operation");
         String operationId = operation.get("id").toString();

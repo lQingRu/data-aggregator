@@ -130,6 +130,8 @@ Create a Search Request with:
 
 Response:
 
+Status: `202 Accepted`
+
 ```json
 {
   "search_request_id": "sr_...",
@@ -148,6 +150,8 @@ Response:
 Do not return `events_url`. Clients use the documented SSE endpoint.
 
 ## API Surface
+OpenAPI contract: [`docs/specs/openapi.yaml`](./openapi.yaml).
+
 Phase 1 needs these endpoints:
 
 - `POST /search-requests`

@@ -1,14 +1,15 @@
 package com.dataaggregator.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
 import java.util.List;
 
 public record SnapshotQueryRequest(
-        List<SnapshotFilter> filters,
-        List<SnapshotSort> sort,
+        List<@Valid SnapshotFilter> filters,
+        List<@Valid SnapshotSort> sort,
         @JsonProperty("group_by") List<String> groupBy,
-        List<SnapshotAggregation> aggregations,
-        SnapshotPageRequest page) {
+        List<@Valid SnapshotAggregation> aggregations,
+        @Valid SnapshotPageRequest page) {
 
     public SnapshotQueryRequest {
         filters = filters == null ? List.of() : List.copyOf(filters);

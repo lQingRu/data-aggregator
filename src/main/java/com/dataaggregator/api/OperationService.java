@@ -29,7 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Profile("!worker")
 public class OperationService {
 
-    private static final TypeReference<List<Map<String, Object>>> WARNING_LIST = new TypeReference<>() {};
+    private static final TypeReference<List<OperationWarningResponse>> WARNING_LIST = new TypeReference<>() {};
     private static final List<String> ACTIVE_STATUSES = List.of("queued", "running", "waiting_retry");
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -49,43 +49,31 @@ public class OperationService {
     }
 
     @Transactional
-    public Map<String, Object> createSearchRequest(String userId, SearchRequestCreateRequest request) {
+    public SearchRequestCreateResponse createSearchRequest(String userId, SearchRequestCreateRequest request) {
         if (!HybridChunkSearchWorkflow.WORKFLOW_ID.equals(request.workflow())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "Unsupported search workflow: " + request.workflow());
         }
-        if (request.keywords() == null || request.keywords().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search request keywords are required");
-        }
-        if (request.question() == null || request.question().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search request question is required");
-        }
-        if (request.retrievalFilters().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search request retrieval_filters are required");
-        }
-        if (request.initialSort().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search request initial_sort is required");
-        }
         SearchRunIds ids = orchestrator.startHybridChunkSearch(new HybridChunkSearchStartRequest(
-                userId, request.keywords(), request.question(), request.retrievalFilters(), request.initialSort()));
+                userId,
+                request.keywords(),
+                request.question(),
+                request.retrievalFilters().asMap(),
+                request.initialSort().asMap()));
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("search_request_id", ids.searchRequestId());
-        response.put("search_run_id", ids.searchRunId());
-        response.put("result_snapshot_id", ids.resultSnapshotId());
-        response.put("operation", operation(ids.operationId(), userId));
-        return response;
+        return new SearchRequestCreateResponse(
+                ids.searchRequestId(), ids.searchRunId(), ids.resultSnapshotId(), operation(ids.operationId(), userId));
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> operation(String operationId, String userId) {
+    public OperationResponse operation(String operationId, String userId) {
         return loadOperation(operationId, userId);
     }
 
     @Transactional
-    public Map<String, Object> cancelOperation(String operationId, String userId) {
-        Map<String, Object> operation = loadOperation(operationId, userId);
-        if (ACTIVE_STATUSES.contains(operation.get("status"))) {
+    public OperationResponse cancelOperation(String operationId, String userId) {
+        OperationResponse operation = loadOperation(operationId, userId);
+        if (ACTIVE_STATUSES.contains(operation.status())) {
             jdbcTemplate.update(
                     """
                     update async_runs
@@ -100,36 +88,30 @@ public class OperationService {
                     where async_run_id = :operationId and status in ('queued', 'running', 'waiting_retry')
                     """,
                     params(operationId, userId));
-            if ("result_snapshot".equals(operation.get("scope_type"))) {
+            if ("result_snapshot".equals(operation.scopeType())) {
                 jdbcTemplate.update(
                         """
                         update result_snapshots
                         set status = 'cancelled'
                         where id = :snapshotId and user_id = :userId and status = 'pending'
                         """,
-                        new MapSqlParameterSource("snapshotId", operation.get("scope_id")).addValue("userId", userId));
+                        new MapSqlParameterSource("snapshotId", operation.scopeId()).addValue("userId", userId));
             }
         }
-        eventPublisher.publishEvent(new AsyncRunChangedEvent(
-                operationId,
-                userId,
-                operation.get("scope_type").toString(),
-                operation.get("scope_id").toString()));
+        eventPublisher.publishEvent(
+                new AsyncRunChangedEvent(operationId, userId, operation.scopeType(), operation.scopeId()));
         return loadOperation(operationId, userId);
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> snapshotActivity(String snapshotId, String userId) {
+    public SnapshotActivityResponse snapshotActivity(String snapshotId, String userId) {
         ensureOwnedSnapshot(snapshotId, userId);
-        Map<String, Object> activity = new LinkedHashMap<>();
-        activity.put("scope_type", "result_snapshot");
-        activity.put("scope_id", snapshotId);
-        activity.put("operations", operationsForScope("result_snapshot", snapshotId, userId));
-        return activity;
+        return new SnapshotActivityResponse(
+                "result_snapshot", snapshotId, operationsForScope("result_snapshot", snapshotId, userId));
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> operationsForScope(String scopeType, String scopeId, String userId) {
+    public List<OperationResponse> operationsForScope(String scopeType, String scopeId, String userId) {
         if (!"result_snapshot".equals(scopeType)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported event scope type: " + scopeType);
         }
@@ -150,25 +132,25 @@ public class OperationService {
                 this::operationRow);
     }
 
-    public Map<String, Object> ssePayload(Map<String, Object> operation) {
+    public Map<String, Object> ssePayload(OperationResponse operation) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("operation_id", operation.get("id"));
-        payload.put("type", operation.get("type"));
-        payload.put("status", operation.get("status"));
-        payload.put("scope_type", operation.get("scope_type"));
-        payload.put("scope_id", operation.get("scope_id"));
-        payload.put("current_step", operation.get("current_step"));
-        payload.put("completed_steps", operation.get("completed_steps"));
-        payload.put("total_steps", operation.get("total_steps"));
-        payload.put("completed_units", operation.get("completed_units"));
-        payload.put("total_units", operation.get("total_units"));
-        payload.put("warning_count", ((List<?>) operation.get("warnings")).size());
-        payload.put("changed_at", operation.get("updated_at"));
+        payload.put("operation_id", operation.id());
+        payload.put("type", operation.type());
+        payload.put("status", operation.status());
+        payload.put("scope_type", operation.scopeType());
+        payload.put("scope_id", operation.scopeId());
+        payload.put("current_step", operation.currentStep());
+        payload.put("completed_steps", operation.completedSteps());
+        payload.put("total_steps", operation.totalSteps());
+        payload.put("completed_units", operation.completedUnits());
+        payload.put("total_units", operation.totalUnits());
+        payload.put("warning_count", operation.warnings().size());
+        payload.put("changed_at", operation.updatedAt());
         return payload;
     }
 
-    public String sseEventName(Map<String, Object> operation) {
-        return switch (operation.get("status").toString()) {
+    public String sseEventName(OperationResponse operation) {
+        return switch (operation.status()) {
             case "completed", "completed_with_warnings" -> "async_run_completed";
             case "failed" -> "async_run_failed";
             case "cancelled" -> "async_run_cancelled";
@@ -176,12 +158,12 @@ public class OperationService {
         };
     }
 
-    public boolean isSnapshotReady(Map<String, Object> operation) {
-        return "result_snapshot".equals(operation.get("scope_type"))
-                && List.of("completed", "completed_with_warnings").contains(operation.get("status"));
+    public boolean isSnapshotReady(OperationResponse operation) {
+        return "result_snapshot".equals(operation.scopeType())
+                && List.of("completed", "completed_with_warnings").contains(operation.status());
     }
 
-    private Map<String, Object> loadOperation(String operationId, String userId) {
+    private OperationResponse loadOperation(String operationId, String userId) {
         try {
             return jdbcTemplate.queryForObject(
                     """
@@ -197,25 +179,24 @@ public class OperationService {
         }
     }
 
-    private Map<String, Object> operationRow(ResultSet rs, int rowNum) throws SQLException {
-        Map<String, Object> operation = new LinkedHashMap<>();
-        operation.put("id", rs.getString("id"));
-        operation.put("type", rs.getString("operation_type"));
-        operation.put("status", rs.getString("status"));
-        operation.put("scope_type", rs.getString("scope_type"));
-        operation.put("scope_id", rs.getString("scope_id"));
-        operation.put("current_step", rs.getString("current_step"));
-        operation.put("completed_steps", rs.getInt("completed_steps"));
-        operation.put("total_steps", rs.getInt("total_steps"));
-        operation.put("completed_units", rs.getObject("completed_units", Integer.class));
-        operation.put("total_units", rs.getObject("total_units", Integer.class));
-        operation.put("warnings", warnings(rs.getString("warnings_json")));
-        operation.put("created_at", instant(rs.getTimestamp("created_at")).toString());
-        operation.put("updated_at", instant(rs.getTimestamp("updated_at")).toString());
-        return operation;
+    private OperationResponse operationRow(ResultSet rs, int rowNum) throws SQLException {
+        return new OperationResponse(
+                rs.getString("id"),
+                rs.getString("operation_type"),
+                rs.getString("status"),
+                rs.getString("scope_type"),
+                rs.getString("scope_id"),
+                rs.getString("current_step"),
+                rs.getInt("completed_steps"),
+                rs.getInt("total_steps"),
+                rs.getObject("completed_units", Integer.class),
+                rs.getObject("total_units", Integer.class),
+                warnings(rs.getString("warnings_json")),
+                instant(rs.getTimestamp("created_at")).toString(),
+                instant(rs.getTimestamp("updated_at")).toString());
     }
 
-    private List<Map<String, Object>> warnings(String rawJson) {
+    private List<OperationWarningResponse> warnings(String rawJson) {
         try {
             return objectMapper.readValue(rawJson, WARNING_LIST);
         } catch (JsonProcessingException exception) {
